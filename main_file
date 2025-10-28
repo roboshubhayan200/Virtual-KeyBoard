@@ -1,0 +1,86 @@
+import cv2
+from cvzone.HandTrackingModule import HandDetector
+import time
+
+class Button:
+    def __init__(self, pos, text, size=(85, 85)):
+        self.pos = pos
+        self.text = text
+        self.size = size
+
+def drawAll(img, ButtonList):
+    for button in ButtonList:
+        x, y = button.pos
+        w, h = button.size
+        cv2.rectangle(img, button.pos, (x + w, y + h), (255, 0, 255), cv2.FILLED)
+        cv2.putText(img, button.text, (x + 18, y + 72),
+                    cv2.FONT_HERSHEY_PLAIN, 5, (255, 255, 255), 5)
+    return img
+
+cap = cv2.VideoCapture(0)
+cap.set(3, 1240)
+cap.set(4, 720)
+
+detector = HandDetector(detectionCon=0.8)
+keys = [
+    ["Q","W","E","R","T","Y","U","I","O","P"],
+    ["A","S","D","F","G","H","J","K","L",";"],
+    ["Z","X","C","V","B","N","M",",",".","/"],
+    ["SP", "BA"]
+]
+
+ButtonList = []
+for i in range(1, len(keys)+1):
+    for x, key in enumerate(keys[i - 1]):
+        ButtonList.append(Button([100 * x + 50, 100 * i + 50], key))
+
+finaltext = ""
+last_click_time = 0
+click_delay = 0.5  # seconds
+
+while True:
+    success, img = cap.read()
+    img, hands = detector.findHands(img)
+    lmlist, bboxinfo = detector.findPosition(img)
+    img = drawAll(img, ButtonList)
+
+    if lmlist:
+        x8, y8 = lmlist[8][1:3]
+        x12, y12 = lmlist[12][1:3]
+
+        for button in ButtonList:
+            x, y = button.pos
+            w, h = button.size
+
+            if x < x8 < x + w and y < y8 < y + h:
+                cv2.rectangle(img, button.pos, (x + w, y + h), (175, 0, 175), cv2.FILLED)
+                cv2.putText(img, button.text, (x + 18, y + 72),
+                            cv2.FONT_HERSHEY_PLAIN, 5, (255, 255, 255), 5)
+
+                l, _, _ = detector.findDistance(lmlist[8][1:3], lmlist[12][1:3], img)
+
+                # Click condition: fingers close + cooldown
+                if l < 40 and (time.time() - last_click_time > click_delay):
+                    last_click_time = time.time()
+
+                    # Handle button press actions
+                    if button.text == "BA":
+                        if len(finaltext) > 0:
+                            finaltext = finaltext[:-1]
+                    elif button.text == "SP":
+                        finaltext += " "
+                    else:
+                        finaltext += button.text
+
+                    # Visual feedback
+                    cv2.rectangle(img, button.pos, (x + w, y + h), (0, 255, 0), cv2.FILLED)
+                    cv2.putText(img, button.text, (x + 18, y + 72),
+                                cv2.FONT_HERSHEY_PLAIN, 5, (255, 255, 255), 5)
+
+    # Draw the typed text box
+    cv2.rectangle(img, (50, 550), (1150, 650), (175, 0, 175), cv2.FILLED)
+    cv2.putText(img, finaltext, (60, 625),
+                cv2.FONT_HERSHEY_PLAIN, 5, (255, 255, 255), 5)
+
+    cv2.imshow("Image", img)
+    cv2.waitKey(1)
